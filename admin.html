@@ -12,6 +12,28 @@
     <h1>Panel de Administración</h1>
     <div id="mensaje" class="alerta"></div>
 
+    <!-- SECCIÓN DE RESULTADOS Y PORCENTAJES -->
+    <h2>Resultados y Conteo de Votos</h2>
+    <button type="button" class="btn-secundario" onclick="cargarResultados()" style="width: auto; padding: 8px 16px;">↻ Actualizar Resultados</button>
+    
+    <table class="tabla-resultados">
+      <thead>
+        <tr>
+          <th>Agrupación / Candidato</th>
+          <th>Votos</th>
+          <th>Porcentaje</th>
+          <th style="width: 35%;">Progreso</th>
+        </tr>
+      </thead>
+      <tbody id="tablaResultadosBody">
+        <tr><td colspan="4" style="text-align: center;">Cargando resultados...</td></tr>
+      </tbody>
+    </table>
+    <div id="resumenTotal" class="resumen-total"></div>
+
+    <hr style="margin: 30px 0;">
+
+    <!-- REGISTRO DE CANDIDATOS -->
     <h2>1. Registrar Candidato</h2>
     <form id="formCandidato">
       <div class="form-group">
@@ -31,6 +53,7 @@
 
     <hr style="margin: 30px 0;">
 
+    <!-- REGISTRO DE ALUMNOS -->
     <h2>2. Registrar Alumno Votante</h2>
     <form id="formAlumno">
       <div class="form-group">
@@ -58,6 +81,52 @@
       msg.style.display = 'block';
     }
 
+    // Cargar tabla de resultados con conteo y porcentaje
+    async function cargarResultados() {
+      const { data: candidatos, error } = await supabaseClient
+        .from('candidatos')
+        .select('*')
+        .order('votos', { ascending: false });
+
+      if (error) return console.error(error);
+
+      const { count: totalAlumnos } = await supabaseClient
+        .from('alumnos')
+        .select('*', { count: 'exact', head: true });
+
+      const totalVotos = candidatos.reduce((suma, c) => suma + (c.votos || 0), 0);
+      const tbody = document.getElementById('tablaResultadosBody');
+
+      if (candidatos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No hay candidatos registrados.</td></tr>';
+        document.getElementById('resumenTotal').textContent = '';
+        return;
+      }
+
+      tbody.innerHTML = candidatos.map(c => {
+        const porcentaje = totalVotos > 0 ? ((c.votos / totalVotos) * 100).toFixed(2) : '0.00';
+        return `
+          <tr>
+            <td>
+              <img src="${c.logo_url}" class="logo-mini" alt="Logo">
+              <strong>${c.partido}</strong><br>
+              <span style="font-size: 13px; color: #555; margin-left: 58px;">${c.nombre}</span>
+            </td>
+            <td><strong>${c.votos}</strong></td>
+            <td><strong>${porcentaje}%</strong></td>
+            <td>
+              <div class="barra-fondo">
+                <div class="barra-progreso" style="width: ${porcentaje}%;"></div>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      document.getElementById('resumenTotal').textContent = 
+        `Total de votos emitidos: ${totalVotos} de ${totalAlumnos || 0} alumnos registrados`;
+    }
+
     // Subir logo y guardar candidato
     document.getElementById('formCandidato').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -66,17 +135,14 @@
       const archivo = document.getElementById('logoCand').files[0];
       const nombreArchivo = `${Date.now()}_${archivo.name}`;
 
-      // 1. Subir imagen al bucket 'Logos'
       const { error: uploadError } = await supabaseClient.storage
         .from('Logos')
         .upload(nombreArchivo, archivo);
 
       if (uploadError) return mostrarAlerta('Error al subir logo: ' + uploadError.message, 'error');
 
-      // 2. Obtener URL pública del logo
       const { data: urlData } = supabaseClient.storage.from('Logos').getPublicUrl(nombreArchivo);
 
-      // 3. Insertar candidato en la tabla SQL
       const { error: dbError } = await supabaseClient.from('candidatos').insert([
         { nombre, partido, logo_url: urlData.publicUrl }
       ]);
@@ -84,6 +150,7 @@
       if (dbError) return mostrarAlerta('Error en BD: ' + dbError.message, 'error');
       mostrarAlerta('Candidato registrado correctamente.', 'exito');
       e.target.reset();
+      cargarResultados();
     });
 
     // Guardar alumno en el padrón
@@ -100,7 +167,11 @@
       if (error) return mostrarAlerta('Error (posible DNI duplicado): ' + error.message, 'error');
       mostrarAlerta('Alumno agregado al padrón.', 'exito');
       e.target.reset();
+      cargarResultados();
     });
+
+    // Cargar resultados al abrir el panel
+    cargarResultados();
   </script>
 </body>
 </html>
