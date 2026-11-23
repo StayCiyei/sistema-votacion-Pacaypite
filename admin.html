@@ -66,15 +66,15 @@
       const archivo = document.getElementById('logoCand').files[0];
       const nombreArchivo = `${Date.now()}_${archivo.name}`;
 
-      // 1. Subir imagen al bucket 'logos'
+      // 1. Subir imagen al bucket 'Logos'
       const { error: uploadError } = await supabaseClient.storage
-        .from('logos')
+        .from('Logos')
         .upload(nombreArchivo, archivo);
 
       if (uploadError) return mostrarAlerta('Error al subir logo: ' + uploadError.message, 'error');
 
       // 2. Obtener URL pública del logo
-      const { data: urlData } = supabaseClient.storage.from('logos').getPublicUrl(nombreArchivo);
+      const { data: urlData } = supabaseClient.storage.from('Logos').getPublicUrl(nombreArchivo);
 
       // 3. Insertar candidato en la tabla SQL
       const { error: dbError } = await supabaseClient.from('candidatos').insert([
