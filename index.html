@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Sistema de Votación Escolar</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="nav"><a href="admin.html">Panel Admin →</a></div>
+    <h1>Elecciones Estudiantiles</h1>
+    <div id="mensaje" class="alerta"></div>
+
+    <div class="form-group">
+      <label>Ingresa tu DNI o Código de Alumno para habilitar tu voto:</label>
+      <input type="text" id="dniVotante" placeholder="Ej. 74859612">
+    </div>
+
+    <div id="listaCandidatos" class="grid-candidatos"></div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script>
+    const msg = document.getElementById('mensaje');
+    function mostrarAlerta(texto, tipo) {
+      msg.textContent = texto;
+      msg.className = `alerta ${tipo}`;
+      msg.style.display = 'block';
+    }
+
+    async function cargarCandidatos() {
+      const { data, error } = await supabaseClient
+        .from('candidatos')
+        .select('*')
+        .order('id', { ascending: true });
+
+      if (error) return console.error(error);
+
+      const contenedor = document.getElementById('listaCandidatos');
+      contenedor.innerHTML = data.map(c => `
+        <div class="card">
+          <img src="${c.logo_url}" alt="Logo ${c.partido}">
+          <h3>${c.partido}</h3>
+          <p>${c.nombre}</p>
+          <p><strong>Votos: ${c.votos}</strong></p>
+          <button onclick="votar(${c.id})">Votar por esta lista</button>
+        </div>
+      `).join('');
+    }
+
+    async function votar(candidatoId) {
+      const dni = document.getElementById('dniVotante').value.trim();
+      if (!dni) return mostrarAlerta('Por favor, ingresa tu DNI antes de votar.', 'error');
+
+      // Llamada a la función SQL 'emitir_voto'
+      const { data, error } = await supabaseClient.rpc('emitir_voto', {
+        p_dni: dni,
+        p_candidato_id: candidatoId
+      });
+
+      if (error) return mostrarAlerta('Error al procesar voto: ' + error.message, 'error');
+
+      if (data === 'NO_EXISTE') {
+        mostrarAlerta('El DNI ingresado no figura en el padrón de alumnos.', 'error');
+      } else if (data === 'YA_VOTO') {
+        mostrarAlerta('Este alumno ya emitió su voto anteriormente.', 'error');
+      } else if (data === 'EXITO') {
+        mostrarAlerta('¡Tu voto ha sido registrado con éxito!', 'exito');
+        document.getElementById('dniVotante').value = '';
+        cargarCandidatos();
+      }
+    }
+
+    cargarCandidatos();
+  </script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Administración - Votación</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="nav"><a href="index.html">Ir a Votación →</a></div>
+    <h1>Panel de Administración</h1>
+    <div id="mensaje" class="alerta"></div>
+
+    <h2>1. Registrar Candidato</h2>
+    <form id="formCandidato">
+      <div class="form-group">
+        <label>Nombre del Candidato:</label>
+        <input type="text" id="nombreCand" required>
+      </div>
+      <div class="form-group">
+        <label>Lista / Agrupación:</label>
+        <input type="text" id="partidoCand" required>
+      </div>
+      <div class="form-group">
+        <label>Logo de la Lista (Imagen):</label>
+        <input type="file" id="logoCand" accept="image/*" required>
+      </div>
+      <button type="submit">Guardar Candidato</button>
+    </form>
+
+    <hr style="margin: 30px 0;">
+
+    <h2>2. Registrar Alumno Votante</h2>
+    <form id="formAlumno">
+      <div class="form-group">
+        <label>DNI o Código del Alumno:</label>
+        <input type="text" id="dniAlumno" required>
+      </div>
+      <div class="form-group">
+        <label>Nombre Completo:</label>
+        <input type="text" id="nombreAlumno" required>
+      </div>
+      <div class="form-group">
+        <label>Grado y Sección:</label>
+        <input type="text" id="gradoAlumno" placeholder="Ej. 3° B" required>
+      </div>
+      <button type="submit">Registrar Alumno</button>
+    </form>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script>
+    const msg = document.getElementById('mensaje');
+    function mostrarAlerta(texto, tipo) {
+      msg.textContent = texto;
+      msg.className = `alerta ${tipo}`;
+      msg.style.display = 'block';
+    }
+
+    // Subir logo y guardar candidato
+    document.getElementById('formCandidato').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const nombre = document.getElementById('nombreCand').value;
+      const partido = document.getElementById('partidoCand').value;
+      const archivo = document.getElementById('logoCand').files[0];
+      const nombreArchivo = `${Date.now()}_${archivo.name}`;
+
+      // 1. Subir imagen al bucket 'logos'
+      const { error: uploadError } = await supabaseClient.storage
+        .from('logos')
+        .upload(nombreArchivo, archivo);
+
+      if (uploadError) return mostrarAlerta('Error al subir logo: ' + uploadError.message, 'error');
+
+      // 2. Obtener URL pública del logo
+      const { data: urlData } = supabaseClient.storage.from('logos').getPublicUrl(nombreArchivo);
+
+      // 3. Insertar candidato en la tabla SQL
+      const { error: dbError } = await supabaseClient.from('candidatos').insert([
+        { nombre, partido, logo_url: urlData.publicUrl }
+      ]);
+
+      if (dbError) return mostrarAlerta('Error en BD: ' + dbError.message, 'error');
+      mostrarAlerta('Candidato registrado correctamente.', 'exito');
+      e.target.reset();
+    });
+
+    // Guardar alumno en el padrón
+    document.getElementById('formAlumno').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const dni = document.getElementById('dniAlumno').value.trim();
+      const nombre_completo = document.getElementById('nombreAlumno').value.trim();
+      const grado_seccion = document.getElementById('gradoAlumno').value.trim();
+
+      const { error } = await supabaseClient.from('alumnos').insert([
+        { dni, nombre_completo, grado_seccion }
+      ]);
+
+      if (error) return mostrarAlerta('Error (posible DNI duplicado): ' + error.message, 'error');
+      mostrarAlerta('Alumno agregado al padrón.', 'exito');
+      e.target.reset();
+    });
+  </script>
+</body>
+</html>
