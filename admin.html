@@ -22,11 +22,12 @@
           <th>Agrupación / Candidato</th>
           <th>Votos</th>
           <th>Porcentaje</th>
-          <th style="width: 35%;">Progreso</th>
+          <th style="width: 28%;">Progreso</th>
+          <th>Acciones</th>
         </tr>
       </thead>
       <tbody id="tablaResultadosBody">
-        <tr><td colspan="4" style="text-align: center;">Cargando resultados...</td></tr>
+        <tr><td colspan="5" style="text-align: center;">Cargando resultados...</td></tr>
       </tbody>
     </table>
     <div id="resumenTotal" class="resumen-total"></div>
@@ -81,7 +82,7 @@
       msg.style.display = 'block';
     }
 
-    // Cargar tabla de resultados con conteo y porcentaje
+    // Cargar tabla de resultados con conteo, porcentaje y opción de eliminar
     async function cargarResultados() {
       const { data: candidatos, error } = await supabaseClient
         .from('candidatos')
@@ -98,13 +99,17 @@
       const tbody = document.getElementById('tablaResultadosBody');
 
       if (candidatos.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No hay candidatos registrados.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No hay candidatos registrados.</td></tr>';
         document.getElementById('resumenTotal').textContent = '';
         return;
       }
 
       tbody.innerHTML = candidatos.map(c => {
         const porcentaje = totalVotos > 0 ? ((c.votos / totalVotos) * 100).toFixed(2) : '0.00';
+        const nombreEscapado = (c.nombre || '').replace(/'/g, "\\'");
+        const partidoEscapado = (c.partido || '').replace(/'/g, "\\'");
+        const logoEscapado = (c.logo_url || '').replace(/'/g, "\\'");
+
         return `
           <tr>
             <td>
@@ -119,12 +124,52 @@
                 <div class="barra-progreso" style="width: ${porcentaje}%;"></div>
               </div>
             </td>
+            <td>
+              <button type="button" class="btn-cerrar" onclick="eliminarCandidato(${c.id}, '${partidoEscapado} - ${nombreEscapado}', '${logoEscapado}')">
+                Eliminar
+              </button>
+            </td>
           </tr>
         `;
       }).join('');
 
       document.getElementById('resumenTotal').textContent = 
         `Total de votos emitidos: ${totalVotos} de ${totalAlumnos || 0} alumnos registrados`;
+    }
+
+    // Extraer nombre de archivo desde la URL pública de Storage para borrarlo
+    function extraerNombreArchivoLogo(logoUrl) {
+      if (!logoUrl) return null;
+      try {
+        const partes = logoUrl.split('/Logos/');
+        if (partes.length < 2) return null;
+        return decodeURIComponent(partes[1].split('?')[0]);
+      } catch {
+        return null;
+      }
+    }
+
+    // Eliminar candidato y su logo si aplica
+    async function eliminarCandidato(id, etiqueta, logoUrl) {
+      const confirmar = confirm(`¿Seguro que deseas eliminar al candidato "${etiqueta}"? Sus votos acumulados también se borrarán.`);
+      if (!confirmar) return;
+
+      const nombreArchivo = extraerNombreArchivoLogo(logoUrl);
+      if (nombreArchivo) {
+        await supabaseClient.storage.from('Logos').remove([nombreArchivo]);
+      }
+
+      const { error } = await supabaseClient
+        .from('candidatos')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        return mostrarAlerta('Error al eliminar candidato: ' + error.message, 'error');
+      }
+
+      mostrarAlerta('Candidato eliminado correctamente.', 'exito');
+      cargarResultados();
     }
 
     // Subir logo y guardar candidato
